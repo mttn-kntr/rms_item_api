@@ -6,6 +6,5 @@ module RmsItemApi
       response = connection('1.0/item/', 'get').get {|r| r.params['itemUrl'] = item_data}
       handler response
     end
-
   end
 end

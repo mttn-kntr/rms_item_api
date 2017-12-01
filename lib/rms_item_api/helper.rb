@@ -19,17 +19,13 @@ module RmsItemApi
       if rexml.elements["result/status/systemStatus"].text == "NG"
         raise rexml.elements["result/status/message"].text
       end
-      status_parser(rexml)
       case response.env.method
       when :get
-        get_response_parser(rexml)
+        item_response_parser(rexml)
       # when :post
       #   post_response_parser(rexml)
-      end
-      self
+      end  
     end
-
-    private
 
     def encoded_key
       if @serviceSecret.blank? && @licenseKey.blank?
@@ -40,7 +36,7 @@ module RmsItemApi
       end
     end
 
-    def get_endpoint(rexml)
+    def get_result_endpoint(rexml)
       result = {}
       interfaceId = rexml.elements["result/status/interfaceId"].text
       dot_count = interfaceId.count(".")
@@ -50,90 +46,256 @@ module RmsItemApi
       result
     end
 
-    def status_parser(rexml)
-      # p "status_parserにきたよーーーーーーーーーーー"
-      # endpoint = get_endpoint(rexml)
-      # if endpoint[:api] == "item"
-      #   xpoint = "result/#{endpoint[:camel]}Result/code" # origin
-      # elsif endpoint[:api] == "category"
-      #   xpoint = "result/#{endpoint[:camel]}Result/code" # origin
-      # elsif endpoint[:api] == "genre"
-      #   xpoint = "result/navigation#{endpoint[:api].capitalize}GetResult/genre"
-      # elsif endpoint[:api] == "cabinet"
-      #   p "cabinet---------"
-      #   xpoint = "result/#{endpoint[:api]}FoldersGetResult"
-      # elsif endpoint[:api] == "coupon"
-      #   xpoint = "result/#{endpoint[:api]}"
-      # elsif endpoint[:api] == "shop_management"
-      #   p "shop_managementにきたよーーーーーー"
-      #   xpoint = "result/delvAreaMasterList"
-      # end
-      # p xpoint
-      # p "xpointが見れてるよーーーーーーーーーーーー！"
-      # response_code = rexml.elements[xpoint].text
-      #
-      # yml = "#{File.dirname(__FILE__)}/../../config/response_codes.yml"
-      # response_codes = YAML.load_file(yml)
-      #
-      # self.define_singleton_method(:is_success?) { response_code == 'N000' ? true : false }
-      # self.define_singleton_method(:message) { response_codes[response_code] }
-      # err_point = "result/#{endpoint[:camel]}Result/errorMessages/errorMessage/msg"
-      # err_msg = []
-      # rexml.elements.each(err_point) do |element|
-      #   err_msg << element.text
-      # end
-      # self.define_singleton_method(:errors) { err_msg }
-      # p "err_msg=#{err_msg}"
-      # p "is_success?を通過するよーー？？？？？？？？？？？"
-      # self.is_success?
-      # p "is_success?を通過しましたーーーーーーーーーーーー"
+    def get_request_endpoint(rexml)
+      request = {}
+      interfaceId = rexml.elements["request/status/interfaceId"].text
+      dot_count = interfaceId.count(".")
+      request[:api] = interfaceId.split('.')[dot_count-1]
+      request[:method] = interfaceId.split('.')[dot_count]
+      request[:camel] = "#{request[:api]}#{request[:method].capitalize}"
+      result
     end
 
-    def get_response_parser(rexml)
-      endpoint = get_endpoint(rexml)
-      if endpoint[:api] == "item"
-        xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}" # original code
-      elsif endpoint[:api] == "category"
-        xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
-      elsif endpoint[:api] == "genre"
-        xpoint = "result/navigation#{endpoint[:api].capitalize}GetResult/#{endpoint[:api]}" # genre無理やり
-      elsif endpoint[:api] == "folders" || endpoint[:api] == "files"
-        xpoint = "result/cabinet#{endpoint[:api].capitalize}GetResult"
-      elsif endpoint[:api] == "coupon"
-        xpoint = "result/#{endpoint[:api]}"
-      elsif endpoint[:api] == "asuraku"
+    def item_response_parser(rexml)
+      endpoint = get_result_endpoint(rexml)
+      # ------------------------ItemAPI------------------------------------
+      case endpoint[:api]
+      when "item"
+        api_type = "item"
+        case endpoint[:method]
+        when "get"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+          singular_operate(rexml,xpoint, api_type)
+        when "insert"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+          singular_operate(rexml,xpoint, api_type)
+        when "update"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+          singular_operate(rexml,xpoint, api_type)
+        when "delete"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+          singular_operate(rexml,xpoint, api_type)
+        when "search"
+          xpoint = "result/#{endpoint[:camel]}Result/items/#{endpoint[:api]}"
+          multiple_operate(rexml, xpoint, api_type)
+        end
+      # ------------------------ProductAPI---------------------------------
+      # 一旦とばす
+      # when "product"
+      #   xpoint = "result/#{endpoint[:camel]}Result/products/#{endpoint[:api]}"
+      # ------------------------CabinetAPI--------------------------------
+      when "usage"
+        api_type = "cabinet"
+        xpoint = "result/cabinet#{endpoint[:camel]}Result"
+        singular_operate(rexml, xpoint, api_type)
+      when "folders"
+        api_type = "cabinet"
+        xpoint = "result/cabinetFoldersGetResult/#{endpoint[:api]}/folder"
+        multiple_operate(rexml, xpoint, api_type)
+      when "files"
+        api_type = "cabinet"
+        case endpoint[:method]
+        when "get"
+          xpoint = "result/cabinetFolder#{endpoint[:camel]}Result/files/file"
+          multiple_operate(rexml, xpoint, api_type)
+        when "search"
+          xpoint = "result/cabinetFilesSearchResult/files/file"
+          multiple_operate(rexml, xpoint, api_type)
+        # when "get"
+        #  xpoint = "result/cabinetTrashbox#{endpoint[:camel]}Result/files/file"
+        end
+      when "file"
+        api_type = "cabinet"
+        case endpoint[:method]
+        when "revert"
+          xpoint = "request/#{endpoint[:camel]}Request/file"
+        when "delete"
+          xpoint = "request/#{endpoint[:camel]}Request/file"
+        when "insert"
+          xpoint = "request/#{endpoint[:camel]}Request/file"
+          singular_operate(rexml, xpoint, api_type)
+        when "update"
+          xpoint = "request/#{endpoint[:camel]}Request/file"
+        end
+      when "folder"
+        if endpoint[:method] == "insert"
+          xpoint = "request/#{endpoint[:camel]}Request/file"
+        end
+      # ------------------------NavigationAPI------------------------------
+      # 一旦とばす
+      # when "genre"
+      #   xpoint = "result/navigation#{endpoint[:camel]}Result/genre"
+      # when "tag"
+      #   xpoint = "result/navigationGenre#{endpoint[:camel]}Result/genre"
+      # when "header"
+      #   xpoint = "result/navigationGenreTagGetResult"
+      # ------------------------CategoryAPI---------------------------------
+      when "categorysets"
+        xpoint = "result/#{endpoint[:camel]}Result/categorySetList/categorySet"
+        multiple_operate(rexml, xpoint)
+      when "categories"
+        xpoint = "result/#{endpoint[:camel]}Result/categoryList/category"
+      when "category"
+        case endpoint[:method]
+        when "get"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+        when "insert"
+          xpoint = "result/#{endpoint[:camel]}Result/#{endpoint[:api]}"
+        when "update"
+          xpoint = "request/#{endpoint[:camel]}Request/#{endpoint[:api]}"
+        when "delete"
+          xpoint = "request/#{endpoint[:camel]}Request/#{endpoint[:api]}"
+        when "move"
+          xpoint = "request/#{endpoint[:camel]}Request"
+        end
+      # -----------------------CouponAPI(coupon)---------------------------
+      # 一旦とばす
+      # when "coupon"
+      #   case endpoint[:method]
+      #   when "issue"
+      #     xpoint = "request/#{endpoint[:camel]}Request/#{endpoint[:api]}"
+      #   when "update"
+      #     xpoint = "request/#{endpoint[:camel]}Request/#{endpoint[:api]}"
+      #   when "delete"
+      #     xpoint = "request/#{endpoint[:camel]}Request/#{endpoint[:api]}"
+      #   when "get"
+      #     xpoint = "result/#{endpoint[:api]}"
+      #   when "search"
+      #     xpoint = "result/coupons/#{endpoint[:api]}"
+      #   end
+      # -----------------------CouponAPI(thankscoupon)---------------------
+      # 一旦とばす
+      # when "thankscoupon"
+      #   case endpoint[:method]
+      #   when "issue"
+      #     xpoint = "request/#{endpoint[:method].capitalize}"
+      #   when "update"
+      #     xpoint = "request/#{endpoint[:method].capitalize}"
+      #   when "stop"
+      #     xpoint = "result/#{endpoint[:method].capitalize}"
+      #   when "get"
+      #     xpoint = "result/#{endpoint[:method].capitalize}"
+      #   when "search"
+      #     xpoint = "result/#{endpoint[:method].capitalize}"
+      #   end
+      # -----------------------ShopManagementAPI---------------------------
+      when "segment"
+        case endpoint[:method]
+        when "get"
+          xpoint = ""
+        end
+      when "list"
+      when "asuraku"
         xpoint = "result/delvAreaMasterList/delvdateMaster"
       end
+    end
+
+    # 元々あったxmlパースコードをメソッドにして一旦ここに保持
+    def parse_xpoint_element(rexml, xpoint)
       rexml.elements.each(xpoint) do |result|
         result.children.each do |el|
           next if el.to_s.strip.blank?
           if el.has_elements?
-            begin
-              elif = self.define_singleton_method(el.name.underscore) {
-                Hash.rakuten_from_xml(el.to_s)
-              }
-              p result
-            rescue => e
-              puts e
-            end
+            sample = self.define_singleton_method(el.name.underscore) {              
+              Hash.rakuten_from_xml(el.to_s)
+            }
           else
-            begin
-              elelse = self.define_singleton_method(el.name.underscore) {
-                el.text.try!(:force_encoding, 'utf-8')
-              }
-            rescue => e
-              puts e
-            end
+            sample = self.define_singleton_method(el.name.underscore) {
+             el.text.try!(:force_encoding, 'utf-8')
+            }
+          end
+        end
+      end
+    end
+
+    # １つの商品を操作する場合に利用
+    def singular_operate(rexml, xpoint, api_type)
+      case api_type
+      when "item"
+        # parse_xpoint_element(rexml, xpoint)
+        rexml.elements.each(xpoint) do |result|
+          result.children.each do |el|
+            next if el.to_s.strip.blank?
+             sample = self.define_singleton_method(el.name.underscore) {
+              el.text.try!(:force_encoding, 'utf-8')
+            }
+          end
+        end
+      when "cabinet"
+        rexml.elements.each(xpoint) do |result|
+          result.children.each do |el|
+            next if el.to_s.strip.blank?
+             sample = self.define_singleton_method(el.name.underscore) {
+              el.text.try!(:force_encoding, 'utf-8')
+            }
           end
         end
       end
       self
     end
 
+    # 複数の商品を操作する場合に利用
+    def multiple_operate(rexml, xpoint, api_type)
+      if api_type == "item"
+        array = []
+          rexml.elements.each(xpoint) do |result|
+            result.children.each do |el|
+              next if el.to_s.strip.blank?
+              if el.has_elements?
+                begin
+                  elif = self.define_singleton_method(el.name.underscore) {
+                    p Hash.rakuten_from_xml(el.to_s)
+                  }
+                  p array.push(item_name)
+                rescue => e
+                    puts e
+                end
+              else
+                begin
+                  elelse = self.define_singleton_method(el.name.underscore) {
+                    el.text.try!(:force_encoding, 'utf-8')
+                  }
+                  # p array.push(item_name)
+                rescue => e
+                  puts e
+                end
+              end
+            end
+          end
+        else api_type == "cabinet"
+          array = []
+          rexml.elements.each(xpoint) do |result|
+            result.children.each do |el|
+              next if el.to_s.strip.blank?
+              if el.has_elements?
+                begin
+                  elif = self.define_singleton_method(el.name.underscore) {
+                    p Hash.rakuten_from_xml(el.to_s)
+                  }
+                  # p array.push(folder_name)
+                rescue => e
+                    puts e
+                end
+              else
+                begin
+                  elelse = self.define_singleton_method(el.name.underscore) {
+                    el.text.try!(:force_encoding, 'utf-8')
+                  }
+                  p array.push(file_name)
+                rescue => e
+                  puts e
+                end
+              end
+            end
+          end
+        end
+      array
+    end
+
+
     def post_response_parser(rexml)
       self
     end
-
   end
 end
 
@@ -161,6 +323,5 @@ class Hash
       end
       { el.name.to_sym => value }
     end
-
   end
 end

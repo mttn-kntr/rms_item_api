@@ -12,8 +12,8 @@ module RmsItemApi
       handler response
     end
 
-    def categorsets_get
-      response = connection('1.0/categoryapi/shop/categorsets/','get').get
+    def categorysets_get
+      response = connection('1.0/categoryapi/shop/categorysets/','get').get
       handler response
     end
 
